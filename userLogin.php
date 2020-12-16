@@ -9,22 +9,30 @@
     //form for log in and sign up
     echo <<<_END
     <html><head><title>Login/Signup</title></head><body>
-    <h1>Log In</h1>
+    <h1>Translator App</h1>
+    <hr>
+    <pre>
+    <h2>Log In to upload and use custom dictionary</h2>
     <form method='post' action='userLogin.php' enctype='multipart/form-data'>
-        <pre>
         Username: <input type='text' name='name'><br>
         Password: <input type='password' name='password'>
         <input type='submit' value='Login' name='login'>
-        <pre>
     </form>
-    <h1>Or Sign Up Below</h1>
+    <h2>Or Sign Up Below</h2>
     <form method='post' action='userLogin.php' enctype='multipart/form-data'>
         <pre>
         Email:    <input type='text' name='createEmail'><br>
         Username: <input type='text' name='createName'><br>
         Password: <input type='password' name='createPassword'>
         <input type='submit' value='Create User' name='createUser'>
-        <pre>
+        </pre>
+    </form>
+    <h2>Or use default dictionary.</h2>
+    <h5>If word does not exist in dictionary, inputted word will be printed out in English.</h5>
+    <form method='post' action='userLogin.php' enctype='multipart/form-data'>
+        <input type='text' name='english'>
+        <input type='submit' value='translate' name='translate'>
+        <br><br>
     </form>
     _END;
 
@@ -74,6 +82,26 @@
             echo 'User created.';
         }
         
+    }
+
+    //searches db for matches and prints out translated word if found, otherwise prints out user inputted word in English
+    if (isset($_POST['translate'])) {
+        $englishPhrase = sanitize($conn, $_POST['english']);
+        $words = explode(" ", $englishPhrase);
+        foreach($words as $word) {
+            $query = "SELECT * FROM translation WHERE english='$word'; AND email= 'default'";
+            $result = $conn->query($query);
+            if (!$result) die();
+            $rows = $result->num_rows;
+            if ($rows == 0) // if word doesnt exist in database, print out the inputted word
+                echo $word." ";
+            else { // prints out translation
+                $result->data_seek(0);
+                $row = $result->fetch_array(MYSQLI_NUM);
+                echo $row[2]." ";
+            }
+
+        }
     }
     $conn->close();
 

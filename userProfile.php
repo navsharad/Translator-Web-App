@@ -7,29 +7,54 @@
     //if someone not logged in tries to access this page, gets redirected
     if (!$_SESSION['loggedIn']) header("Location: userLogin.php");
     $email = $_SESSION['email'];
-    
-    //form for user to add content and log out
-    echo <<<_END
+
+        echo <<<_END
         <html><head><title>Profile</title></head><body>
-        <h2>Welcome. Enter name and attach text file to upload.</h2>
+        <h1>Translator App</h1>
+        <hr>
+        <h2>Welcome</h2>
+        <h4> Submit a text file with english word and translated word seperated by a space. Add new line for each entry in the file.</h4>
         <form method='post' action='userProfile.php' enctype='multipart/form-data'>
-            Name: <input type='text' name='filename'><br>
             Text File: <input type='file' name='filecontent'><br>
             <input type='submit' value='add' name='submit'>
             <br><br>
             <h2>Click here to log out.</h2>
             <input type='submit' value='Log Out' name='logout'>
         </form>
+        <h2>Enter English text to translate.</h2>
+        <h5>If word does not exist in dictionary, inputted word will be printed out in English.</h5>
+        <form method='post' action='userProfile.php' enctype='multipart/form-data'>
+            <input type='text' name='english'>
+            <input type='submit' value='translate' name='translate'>
+            <br><br>
+        </form>
         _END;
+    
 
-    //adds user content to database
-    if (isset($_POST['submit']) && !empty($_POST['filename']) && $_FILES && $_FILES['filecontent']['type'] == 'text/plain') {
-        $fileName = sanitize($conn, $_POST['filename']);
+    //adds translation file to database
+    if (isset($_POST['submit']) && $_FILES && $_FILES['filecontent']['type'] == 'text/plain') {
         $fileContent = file_get_contents($_FILES['filecontent']['tmp_name']);
-        $fileContent = sanitize($conn, $fileContent);
-        $query = "INSERT INTO usercontent (email, name, content) VALUES ('$email','$fileName', '$fileContent');";
-        $result = $conn->query($query);
-        if (!$result) echo 'Insert failed';
+        handleFile($conn,$email, $fileContent); //reads file and stores translations in database
+    }   
+        
+    //searches db for matches and prints out translated word if found, otherwise prints out user inputted word
+    if (isset($_POST['translate'])) {
+        $englishPhrase = sanitize($conn, $_POST['english']);
+        $words = explode(" ", $englishPhrase);
+        foreach($words as $word) {
+            $query = "SELECT * FROM translation WHERE english='$word' AND email='$email';";
+            $result = $conn->query($query);
+            if (!$result) die(mysql_error());
+            $rows = $result->num_rows;
+            if ($rows == 0) // if word doesnt exist in database, print out the inputted word
+                echo $word." ";
+            else { // prints out translation
+                $result->data_seek(0);
+                $row = $result->fetch_array(MYSQLI_NUM);
+                echo $row[2]." ";
+            }
+
+        }
     }
 
     //logs user out
@@ -40,26 +65,28 @@
         header("Location: userLogin.php");
     }
 
-    //prints users content
-    $query = "SELECT * FROM usercontent WHERE email='$email';";
-    $result = $conn->query($query);
-    if (!$result) die(mysql_error());
-    $rows = $result->num_rows;
-    echo '<h2>Your Content</h2>';
-    for ($i = 0; $i < $rows; ++$i) {
-        $result->data_seek($i);
-        $row = $result->fetch_array(MYSQLI_NUM);
-        echo <<<_END
-        <pre>
-        Name: $row[1]
-        Content: $row[2]
-        </pre>
-        <hr>
-        _END;
-    } 
-    $result->close();
     $conn->close();
 
+    //sanitizes file content and inserts it into db
+    function handleFile($conn, $email, $fileContent) {
+        $fileContent = stripslashes($fileContent);
+        $fileContent = strip_tags($fileContent);
+        $fileContent = htmlentities($fileContent);
+        $fileContent = rtrim($fileContent);
+
+        $result = $conn->query("TRUNCATE TABLE translation");// deletes previous dictionary since its not needed and to avoid table from getting too crowded
+        if (!$result) echo 'Insert failed';
+        $words = explode("\n", $fileContent);
+        foreach($words as $line) { //each line has the english word followed by translated word, explode them and insert into db
+            $line = explode(" ", $line);
+            $englishWord = $line[0];
+            $transWord = $line[1];
+            $query = "INSERT INTO translation (email, english, translated) VALUES ('$email','$englishWord', '$transWord');";
+            $result = $conn->query($query);
+            if (!$result) echo 'Insert failed';
+        }
+        echo 'File sucessfully added!';
+    }
     //sanitizes user inputted variables
     function sanitize($conn, $var) {
         $var = $conn->real_escape_string($var);
